@@ -2,8 +2,8 @@ package com.baiyi.opscloud.ansible.builder;
 
 import com.baiyi.opscloud.ansible.bo.ServerTaskMemberBO;
 import com.baiyi.opscloud.common.util.BeanCopierUtils;
-import com.baiyi.opscloud.domain.generator.OcServerTask;
-import com.baiyi.opscloud.domain.generator.OcServerTaskMember;
+import com.baiyi.opscloud.domain.generator.opscloud.OcServerTask;
+import com.baiyi.opscloud.domain.generator.opscloud.OcServerTaskMember;
 import com.baiyi.opscloud.domain.generator.opscloud.OcServer;
 
 /**
@@ -19,11 +19,12 @@ public class ServerTaskMemberBuilder {
                 .hostPattern(hostPattern)
                 .manageIp(manageIp)
                 .serverId(ocServer.getId())
+                .envType(ocServer.getEnvType())
                 .build();
         return covert(serverTaskMemberBO);
     }
 
-    private static  OcServerTaskMember covert(  ServerTaskMemberBO serverTaskMemberBO) {
-        return  BeanCopierUtils.copyProperties(serverTaskMemberBO, OcServerTaskMember.class);
+    private static OcServerTaskMember covert(ServerTaskMemberBO serverTaskMemberBO) {
+        return BeanCopierUtils.copyProperties(serverTaskMemberBO, OcServerTaskMember.class);
     }
 }

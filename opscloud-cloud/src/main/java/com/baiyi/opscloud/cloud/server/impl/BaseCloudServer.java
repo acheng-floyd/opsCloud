@@ -7,7 +7,7 @@ import com.baiyi.opscloud.common.util.JSONUtils;
 import com.baiyi.opscloud.common.util.ServerUtils;
 import com.baiyi.opscloud.domain.BusinessWrapper;
 import com.baiyi.opscloud.domain.ErrorEnum;
-import com.baiyi.opscloud.domain.bo.OcServerBO;
+import com.baiyi.opscloud.domain.bo.ServerBO;
 import com.baiyi.opscloud.domain.generator.opscloud.OcCloudServer;
 import com.baiyi.opscloud.domain.generator.opscloud.OcServer;
 import com.baiyi.opscloud.service.cloud.OcCloudServerService;
@@ -17,6 +17,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.InitializingBean;
+import org.springframework.stereotype.Component;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
 
@@ -31,6 +32,7 @@ import java.util.stream.Collectors;
  * @Version 1.0
  */
 @Slf4j
+@Component
 public abstract class BaseCloudServer<T> implements InitializingBean, ICloudServer {
 
     @Resource
@@ -45,6 +47,7 @@ public abstract class BaseCloudServer<T> implements InitializingBean, ICloudServ
     public static final boolean POWER_ON = true;
     public static final boolean POWER_OFF = false;
 
+
     /**
      * 同步接口
      *
@@ -56,14 +59,15 @@ public abstract class BaseCloudServer<T> implements InitializingBean, ICloudServ
     }
 
     /**
-     *  录入实例
+     * 录入实例
+     *
      * @param regionId
      * @param instanceId
      * @return
      */
     @Override
     public Boolean record(String regionId, String instanceId) {
-        T instance = getInstance(regionId,instanceId);
+        T instance = getInstance(regionId, instanceId);
         saveOcCloudServer(instance, Maps.newHashMap(), false);
         return Boolean.TRUE;
     }
@@ -71,10 +75,8 @@ public abstract class BaseCloudServer<T> implements InitializingBean, ICloudServ
     @Override
     public Boolean sync(boolean pushName) {
         Map<String, OcCloudServer> cloudServerMap = getCloudServerMap(Lists.newArrayList());
-        List<T> instanceList = getInstanceList();
-        for (T instance : instanceList)
-            saveOcCloudServer(instance, cloudServerMap, pushName);
-
+        getInstanceList().forEach(i -> saveOcCloudServer(i, cloudServerMap, pushName));
+        setCloudServerDeleted(cloudServerMap);
         return Boolean.TRUE;
     }
 
@@ -105,12 +107,22 @@ public abstract class BaseCloudServer<T> implements InitializingBean, ICloudServ
                 updateCloudServer(instance, ocCloudServer);
                 // TODO 更新 server 表 public_ip
                 // saveServerPublicIP(updateCloudServerByInstance(instance, cloudServerDO)); // 已录入(更新数据)
-                map.remove(instanceId);
             } else {
                 addOcCloudServer(instance);
             }
-        } catch (Exception e) {
+            map.remove(instanceId);
+        } catch (Exception ignored) {
         }
+
+    }
+
+    private void setCloudServerDeleted(Map<String, OcCloudServer> map) {
+        if (map == null || map.isEmpty()) return;
+        map.keySet().forEach(k -> {
+            OcCloudServer ocCloudServer = map.get(k);
+            ocCloudServer.setServerStatus(CloudServerStatus.DELETE.getStatus());
+            ocCloudServerService.updateOcCloudServer(ocCloudServer);
+        });
     }
 
     @Override
@@ -180,11 +192,11 @@ public abstract class BaseCloudServer<T> implements InitializingBean, ICloudServ
     protected OcCloudServer updateCloudServer(T instance, OcCloudServer ocCloudServer) {
         OcCloudServer preCloudServer = getCloudServer(instance);
         preCloudServer.setId(ocCloudServer.getId());
-        invokeCloudServerStatus(preCloudServer, ocCloudServer.getServerStatus());
+        int cloudServerStatus = ocCloudServer.getServerStatus() == null ? 0 : ocCloudServer.getServerStatus();
+        invokeCloudServerStatus(preCloudServer, cloudServerStatus);
         if (StringUtils.isEmpty(preCloudServer.getPrivateIp())) // VM-Tools可能导致获取不到ip
             preCloudServer.setPrivateIp(ocCloudServer.getPrivateIp());
-        if (preCloudServer != null)
-            ocCloudServerService.updateOcCloudServer(preCloudServer);
+        ocCloudServerService.updateOcCloudServer(preCloudServer);
         return preCloudServer;
     }
 
@@ -215,9 +227,8 @@ public abstract class BaseCloudServer<T> implements InitializingBean, ICloudServ
         }
     }
 
-
-    public OcServerBO getOcServerBO(OcServer ocServer) {
-        return OcServerBO.builder()
+    public ServerBO getOcServerBO(OcServer ocServer) {
+        return ServerBO.builder()
                 .ocServer(ocServer)
                 .ocEnv(ocEnvService.queryOcEnvById(ocServer.getEnvType()))
                 .build();
@@ -258,13 +269,43 @@ public abstract class BaseCloudServer<T> implements InitializingBean, ICloudServ
      * @return
      */
     protected BusinessWrapper<Boolean> power(OcCloudServer ocCloudServer, Boolean action) {
-        return new BusinessWrapper(Boolean.TRUE);
+        return BusinessWrapper.SUCCESS;
     }
+
+    /**
+     * 如果支持释放请重写
+     *
+     * @param ocCloudServer
+     * @return
+     */
+    protected Boolean delete(OcCloudServer ocCloudServer) {
+        return true;
+    }
+
 
     private Boolean checkAuth(OcCloudServer ocCloudServer) {
         if (!ocCloudServer.getPowerMgmt())
             return Boolean.FALSE;
         return Boolean.TRUE;
+    }
+
+    @Override
+    public int queryPowerStatus(Integer id) {
+        OcCloudServer ocCloudServer = ocCloudServerService.queryOcCloudServerById(id);
+        int powerStatus = getPowerStatus(ocCloudServer.getRegionId(), ocCloudServer.getInstanceId());
+        ocCloudServer.setPowerStatus(powerStatus);
+        ocCloudServerService.updateOcCloudServer(ocCloudServer);
+        return powerStatus;
+    }
+
+    abstract int getPowerStatus(String regionId, String instanceId);
+
+    @Override
+    public void offline(int serverId) {
+        OcCloudServer ocCloudServer = ocCloudServerService.queryOcCloudServerByUnqueKey(getCloudServerType(), serverId);
+        if (ocCloudServer == null) return;
+        ocCloudServer.setServerStatus(CloudServerStatus.OFFLINE.getStatus());
+        ocCloudServerService.updateOcCloudServer(ocCloudServer);
     }
 
     /**
@@ -277,4 +318,9 @@ public abstract class BaseCloudServer<T> implements InitializingBean, ICloudServ
         CloudServerFactory.register(this);
     }
 
+    @Override
+    public Boolean delete(String instanceId) {
+        OcCloudServer ocCloudServer = ocCloudServerService.queryOcCloudServerByInstanceId(instanceId);
+        return delete(ocCloudServer);
+    }
 }

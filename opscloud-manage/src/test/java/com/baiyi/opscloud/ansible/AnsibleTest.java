@@ -17,6 +17,8 @@ import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * @Author baiyi
@@ -38,8 +40,20 @@ public class AnsibleTest extends BaseUnit {
 
     @Test
     void aTest() {
-      //  System.err.println(UUIDUtils.getUUID());
+        String str = "10.200.1.40 | Cdsdg => { aaa , bbb , ccc }" ;
 
+        Pattern pattern = Pattern.compile("^[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\ \\|\\ \\w+\\ =>\\ ");
+        Matcher matcher = pattern.matcher(str);
+        if (matcher.find()) {
+            String collegeId = matcher.group(0);
+
+            System.out.println(collegeId );//14000
+        }
+    }
+
+
+    @Test
+    void bTest() {
         Set<String>  tags = Sets.newHashSet();
         tags.add("test1");
         tags.add("test2");
@@ -51,21 +65,14 @@ public class AnsibleTest extends BaseUnit {
     void aaaTest() {
 
         long startTime = new Date().getTime();
-        attributeFacadeImpl.createAnsibleHosts();
+        attributeFacadeImpl.createAnsibleHostsTask();
         long endTime = new Date().getTime();
         System.err.println("消耗时间:" + (endTime - startTime));
-
-
-//        List<OcServerGroup> serverGroupList = ocServerGroupService.queryAll();
-//        for (OcServerGroup ocServerGroup : serverGroupList)
-//            attributeAnsible.evictBuild(ocServerGroup);
 
     }
 
     @Test
     void executorTest() {
-        //CommandLine commandLine = CommandLine.parse("ping www.baidu.com");
-
         ansibleExecutor.executorTest(100000L);
         System.err.println("111111");
     }

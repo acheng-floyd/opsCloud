@@ -1,6 +1,7 @@
 package com.baiyi.opscloud.task;
 
 import com.baiyi.opscloud.facade.AttributeFacade;
+import com.baiyi.opscloud.facade.ProfileSubscriptionFacade;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -14,13 +15,13 @@ import javax.annotation.Resource;
  */
 @Slf4j
 @Component
-public class AttributeTask {
-
-    @Resource
-    private TaskUtil taskUtil;
+public class AttributeTask extends BaseTask {
 
     @Resource
     private AttributeFacade attributeFacade;
+
+    @Resource
+    private ProfileSubscriptionFacade profileSubscriptionFacade;
 
     public static final String TASK_SERVER_ATTRIBUTE_ANSIBLE_HOSTS_KEY = "TASK_SERVER_ATTRIBUTE_ANSIBLE_HOSTS_KEY";
 
@@ -29,14 +30,28 @@ public class AttributeTask {
     /**
      * 执行ansible配置文件生成任务
      */
-    @Scheduled(cron = "* */2 * * * ?")
-    public void createAnsibleHostsConsumer() {
-        if (taskUtil.isTaskLock(TASK_SERVER_ATTRIBUTE_ANSIBLE_HOSTS_KEY)) return;
+    @Scheduled(initialDelay = 10000, fixedRate = 60 * 1000)
+    public void createAnsibleHostsConsumerTask() {
         if (taskUtil.getSignalCount(TASK_SERVER_ATTRIBUTE_ANSIBLE_TOPIC) == 0) return;
-        log.info("任务: buildAnsibleHosts 开始执行!");
-        attributeFacade.createAnsibleHosts();
-        log.info("任务: buildAnsibleHosts 执行完成!");
+        if (tryLock()) return;
+        clearTopic();
+        attributeFacade.createAnsibleHostsTask();
+        profileSubscriptionFacade.publishProfile("ANSIBLE_HOSTS");
+        unlock();
     }
 
+    private void clearTopic() {
+        taskUtil.clearSignalCount(TASK_SERVER_ATTRIBUTE_ANSIBLE_TOPIC);
+    }
+
+    @Override
+    protected String getLock() {
+        return TASK_SERVER_ATTRIBUTE_ANSIBLE_HOSTS_KEY;
+    }
+
+    @Override
+    protected String getTaskName() {
+        return "Ansible配置文件生成任务";
+    }
 
 }

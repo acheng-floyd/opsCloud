@@ -4,7 +4,7 @@ import com.aliyuncs.ecs.model.v20140526.DescribeSecurityGroupsResponse;
 import com.aliyuncs.ecs.model.v20140526.DescribeVSwitchesResponse;
 import com.aliyuncs.ecs.model.v20140526.DescribeVpcsResponse;
 import com.baiyi.opscloud.aliyun.core.AliyunCore;
-import com.baiyi.opscloud.aliyun.core.config.AliyunAccount;
+import com.baiyi.opscloud.aliyun.core.config.AliyunCoreConfig;
 import com.baiyi.opscloud.aliyun.ecs.handler.AliyunVPCHandler;
 import com.baiyi.opscloud.cloud.account.CloudAccount;
 import com.baiyi.opscloud.cloud.vpc.ICloudVPC;
@@ -13,9 +13,9 @@ import com.baiyi.opscloud.cloud.vpc.builder.OcCloudVpcSecurityGroupBuilder;
 import com.baiyi.opscloud.cloud.vpc.builder.OcCloudVpcVswitchBuilder;
 import com.baiyi.opscloud.common.base.CloudType;
 import com.baiyi.opscloud.common.util.BeanCopierUtils;
-import com.baiyi.opscloud.domain.generator.OcCloudVpc;
-import com.baiyi.opscloud.domain.generator.OcCloudVpcSecurityGroup;
-import com.baiyi.opscloud.domain.generator.OcCloudVpcVswitch;
+import com.baiyi.opscloud.domain.generator.opscloud.OcCloudVpc;
+import com.baiyi.opscloud.domain.generator.opscloud.OcCloudVpcSecurityGroup;
+import com.baiyi.opscloud.domain.generator.opscloud.OcCloudVpcVswitch;
 import com.google.common.collect.Lists;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -100,7 +100,7 @@ public class AliyunCloudVPC<T, VSW, SG> extends BaseCloudVPC<T, VSW, SG> impleme
 
     @Override
     protected CloudAccount getCloudAccount() {
-        AliyunAccount account = aliyunCore.getAccount();
+        AliyunCoreConfig.AliyunAccount account = aliyunCore.getAccount();
         if (account == null) return null;
         return BeanCopierUtils.copyProperties(account, CloudAccount.class);
     }

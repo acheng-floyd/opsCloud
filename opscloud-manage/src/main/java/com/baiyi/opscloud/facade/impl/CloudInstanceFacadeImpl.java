@@ -13,21 +13,19 @@ import com.baiyi.opscloud.common.util.BeanCopierUtils;
 import com.baiyi.opscloud.common.util.CloudInstanceTemplateUtils;
 import com.baiyi.opscloud.common.util.IDUtils;
 import com.baiyi.opscloud.common.util.SessionUtils;
-import com.baiyi.opscloud.decorator.CloudInstanceTemplateDecorator;
-import com.baiyi.opscloud.decorator.CloudInstanceTypeDecorator;
-import com.baiyi.opscloud.decorator.InstanceTemplateDecorator;
+import com.baiyi.opscloud.decorator.cloud.CloudInstanceTemplateDecorator;
+import com.baiyi.opscloud.decorator.cloud.CloudInstanceTypeDecorator;
+import com.baiyi.opscloud.decorator.cloud.InstanceTemplateDecorator;
 import com.baiyi.opscloud.domain.BusinessWrapper;
 import com.baiyi.opscloud.domain.DataTable;
 import com.baiyi.opscloud.domain.ErrorEnum;
-import com.baiyi.opscloud.domain.generator.*;
-import com.baiyi.opscloud.domain.generator.opscloud.OcServerGroup;
-import com.baiyi.opscloud.domain.generator.opscloud.OcUser;
+import com.baiyi.opscloud.domain.generator.opscloud.*;
 import com.baiyi.opscloud.domain.param.cloud.CloudInstanceTemplateParam;
 import com.baiyi.opscloud.domain.param.cloud.CloudInstanceTypeParam;
-import com.baiyi.opscloud.domain.vo.cloud.OcCloudInstanceTemplateVO;
-import com.baiyi.opscloud.domain.vo.cloud.OcCloudInstanceTypeVO;
-import com.baiyi.opscloud.domain.vo.cloud.OcCloudVSwitchVO;
-import com.baiyi.opscloud.domain.vo.user.OcUserVO;
+import com.baiyi.opscloud.domain.vo.cloud.CloudInstanceTemplateVO;
+import com.baiyi.opscloud.domain.vo.cloud.CloudInstanceTypeVO;
+import com.baiyi.opscloud.domain.vo.cloud.CloudVSwitchVO;
+import com.baiyi.opscloud.domain.vo.user.UserVO;
 import com.baiyi.opscloud.facade.CloudInstanceFacade;
 import com.baiyi.opscloud.facade.CloudInstanceTaskFacade;
 import com.baiyi.opscloud.facade.CloudVPCFacade;
@@ -42,7 +40,6 @@ import org.yaml.snakeyaml.Yaml;
 import org.yaml.snakeyaml.nodes.Tag;
 
 import javax.annotation.Resource;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -98,22 +95,22 @@ public class CloudInstanceFacadeImpl implements CloudInstanceFacade {
     private CloudInstanceTaskFacade cloudInstanceTaskFacade;
 
     @Override
-    public DataTable<OcCloudInstanceTemplateVO.CloudInstanceTemplate> fuzzyQueryCloudInstanceTemplatePage(CloudInstanceTemplateParam.PageQuery pageQuery) {
+    public DataTable<CloudInstanceTemplateVO.CloudInstanceTemplate> fuzzyQueryCloudInstanceTemplatePage(CloudInstanceTemplateParam.PageQuery pageQuery) {
         DataTable<OcCloudInstanceTemplate> table = ocCloudInstanceTemplateService.fuzzyQueryOcCloudInstanceTemplateByParam(pageQuery);
-        DataTable<OcCloudInstanceTemplateVO.CloudInstanceTemplate> dataTable
+        DataTable<CloudInstanceTemplateVO.CloudInstanceTemplate> dataTable
                 = new DataTable<>(table.getData().stream().map(e -> cloudInstanceTemplateDecorator.decorator(e)).collect(Collectors.toList()), table.getTotalNum());
         return dataTable;
     }
 
     @Override
-    public BusinessWrapper<Boolean> saveCloudInstanceTemplate(OcCloudInstanceTemplateVO.CloudInstanceTemplate cloudInstanceTemplate) {
+    public BusinessWrapper<CloudInstanceTemplateVO.CloudInstanceTemplate> saveCloudInstanceTemplate(CloudInstanceTemplateVO.CloudInstanceTemplate cloudInstanceTemplate) {
         OcCloudInstanceTemplate pre = BeanCopierUtils.copyProperties(cloudInstanceTemplate, OcCloudInstanceTemplate.class);
         if (pre.getCloudType() == null)
             return new BusinessWrapper<>(ErrorEnum.CLOUD_TYPE_IS_NULL);
         if (StringUtils.isEmpty(cloudInstanceTemplate.getTemplateName()))
             return new BusinessWrapper<>(ErrorEnum.CLOUD_INSTANCE_TEMPLATE_NAME_NON_COMPLIANCE_WITH_RULES);
         // 重新组装
-        OcCloudInstanceTemplateVO.InstanceTemplate instanceTemplate = instanceTemplateDecorator.decorator(cloudInstanceTemplate);
+        CloudInstanceTemplateVO.InstanceTemplate instanceTemplate = instanceTemplateDecorator.decorator(cloudInstanceTemplate);
         Yaml yaml = new Yaml();
         pre.setTemplateYaml(yaml.dumpAs(instanceTemplate, Tag.MAP, DumperOptions.FlowStyle.BLOCK));// 序列化对象为YAML-BLOCK格式
 
@@ -122,13 +119,11 @@ public class CloudInstanceFacadeImpl implements CloudInstanceFacade {
         } else {
             ocCloudInstanceTemplateService.updateOcCloudInstanceTemplate(pre);
         }
-        BusinessWrapper wrapper = BusinessWrapper.SUCCESS;
-        wrapper.setBody(cloudInstanceTemplateDecorator.decorator(pre));
-        return wrapper;
+        return new BusinessWrapper(cloudInstanceTemplateDecorator.decorator(pre));
     }
 
     @Override
-    public BusinessWrapper<Boolean> createCloudInstance(CloudInstanceTemplateParam.CreateCloudInstance createCloudInstance) {
+    public BusinessWrapper<Integer> createCloudInstance(CloudInstanceTemplateParam.CreateCloudInstance createCloudInstance) {
         // 校验模版
         OcCloudInstanceTemplate ocCloudInstanceTemplate = ocCloudInstanceTemplateService.queryOcCloudInstanceTemplateById(createCloudInstance.getTemplateId());
         if (ocCloudInstanceTemplate == null)
@@ -165,24 +160,21 @@ public class CloudInstanceFacadeImpl implements CloudInstanceFacade {
                 .ocCloudVpcSecurityGroup(ocCloudVpcSecurityGroup)
                 .ocServerGroup(ocServerGroup)
                 .build();
-        OcCloudInstanceTask ocCloudInstanceTask;
+
         OcUser ocUser = ocUserService.queryOcUserByUsername(SessionUtils.getUsername());
-        if (ocUser == null) {
-            ocCloudInstanceTask = CloudInstanceTaskBuilder.build(createCloudInstanceBO);
-        } else {
-            ocCloudInstanceTask = CloudInstanceTaskBuilder.build(createCloudInstanceBO, BeanCopierUtils.copyProperties(ocUser, OcUserVO.User.class));
-        }
+        OcCloudInstanceTask ocCloudInstanceTask = ocUser == null ? CloudInstanceTaskBuilder.build(createCloudInstanceBO)
+                : CloudInstanceTaskBuilder.build(createCloudInstanceBO, BeanCopierUtils.copyProperties(ocUser, UserVO.User.class));
         ocCloudInstanceTaskService.addOcCloudInstanceTask(ocCloudInstanceTask);
         // 执行任务
         cloudInstanceTaskFacade.doCreateInstanceTask(ocCloudInstanceTask, createCloudInstanceBO);
-        return BusinessWrapper.SUCCESS;
+        return new BusinessWrapper(ocCloudInstanceTask.getId());
     }
 
 
     @Override
-    public BusinessWrapper<Boolean> saveCloudInstanceTemplateYAML(OcCloudInstanceTemplateVO.CloudInstanceTemplate cloudInstanceTemplate) {
+    public BusinessWrapper<CloudInstanceTemplateVO.CloudInstanceTemplate> saveCloudInstanceTemplateYAML(CloudInstanceTemplateVO.CloudInstanceTemplate cloudInstanceTemplate) {
         // YAML对象
-        OcCloudInstanceTemplateVO.InstanceTemplate instanceTemplate = CloudInstanceTemplateUtils.convert(cloudInstanceTemplate.getTemplateYAML());
+        CloudInstanceTemplateVO.InstanceTemplate instanceTemplate = CloudInstanceTemplateUtils.convert(cloudInstanceTemplate.getTemplateYAML());
         // 通过YAML对象组装模版
         OcCloudInstanceTemplate pre = CloudInstanceTemplateBuilder.build(instanceTemplate, cloudInstanceTemplate.getId());
         if (pre.getCloudType() == null)
@@ -194,16 +186,14 @@ public class CloudInstanceFacadeImpl implements CloudInstanceFacade {
         } else {
             ocCloudInstanceTemplateService.updateOcCloudInstanceTemplate(pre);
         }
-        BusinessWrapper wrapper = BusinessWrapper.SUCCESS;
-        wrapper.setBody(cloudInstanceTemplateDecorator.decorator(pre));
-        return wrapper;
+        return new BusinessWrapper(cloudInstanceTemplateDecorator.decorator(pre));
     }
 
     @Override
-    public DataTable<OcCloudInstanceTypeVO.CloudInstanceType> fuzzyQueryCloudInstanceTypePage(CloudInstanceTypeParam.PageQuery pageQuery) {
+    public DataTable<CloudInstanceTypeVO.CloudInstanceType> fuzzyQueryCloudInstanceTypePage(CloudInstanceTypeParam.PageQuery pageQuery) {
         DataTable<OcCloudInstanceType> table = ocCloudInstanceTypeService.fuzzyQueryOcCloudInstanceTypeByParam(pageQuery);
-        List<OcCloudInstanceTypeVO.CloudInstanceType> page = BeanCopierUtils.copyListProperties(table.getData(), OcCloudInstanceTypeVO.CloudInstanceType.class);
-        DataTable<OcCloudInstanceTypeVO.CloudInstanceType> dataTable
+        List<CloudInstanceTypeVO.CloudInstanceType> page = BeanCopierUtils.copyListProperties(table.getData(), CloudInstanceTypeVO.CloudInstanceType.class);
+        DataTable<CloudInstanceTypeVO.CloudInstanceType> dataTable
                 = new DataTable<>(page.stream().map(e -> cloudInstanceTypeDecorator.decorator(e, pageQuery.getRegionId(), pageQuery.getExtend())).collect(Collectors.toList()), table.getTotalNum());
         return dataTable;
     }
@@ -252,10 +242,10 @@ public class CloudInstanceFacadeImpl implements CloudInstanceFacade {
     }
 
     @Override
-    public List<OcCloudVSwitchVO.VSwitch> queryCloudInstanceTemplateVSwitch(int templateId, String zoneId) {
+    public List<CloudVSwitchVO.VSwitch> queryCloudInstanceTemplateVSwitch(int templateId, String zoneId) {
         OcCloudInstanceTemplate ocCloudInstanceTemplate = ocCloudInstanceTemplateService.queryOcCloudInstanceTemplateById(templateId);
-        OcCloudInstanceTemplateVO.InstanceTemplate instanceTemplate = CloudInstanceTemplateUtils.convert(ocCloudInstanceTemplate.getTemplateYaml());
-        List<OcCloudInstanceTemplateVO.VSwitch> vswitchList = instanceTemplate.getVswitchs();
+        CloudInstanceTemplateVO.InstanceTemplate instanceTemplate = CloudInstanceTemplateUtils.convert(ocCloudInstanceTemplate.getTemplateYaml());
+        List<CloudInstanceTemplateVO.VSwitch> vswitchList = instanceTemplate.getVswitchs();
         filterVSwitchListByZoneId(zoneId, vswitchList);
         return cloudVPCFacade.updateOcCloudVpcVSwitch(instanceTemplate, vswitchList);
     }
@@ -266,17 +256,12 @@ public class CloudInstanceFacadeImpl implements CloudInstanceFacade {
      * @param zoneId
      * @param vswitchList
      */
-    private void filterVSwitchListByZoneId(String zoneId, List<OcCloudInstanceTemplateVO.VSwitch> vswitchList) {
-        Iterator<OcCloudInstanceTemplateVO.VSwitch> iter = vswitchList.iterator();
-        while (iter.hasNext()) {
-            if (!zoneId.equals(iter.next().getZoneId()))
-                iter.remove();
-        }
+    private void filterVSwitchListByZoneId(String zoneId, List<CloudInstanceTemplateVO.VSwitch> vswitchList) {
+        vswitchList.removeIf(vSwitch -> !zoneId.equals(vSwitch.getZoneId()));
     }
 
     private void delTypeMap(Map<String, OcCloudInstanceType> typeMap) {
-        for (String instanceTypeId : typeMap.keySet())
-            ocCloudInstanceTypeService.deleteOcCloudInstanceById(typeMap.get(instanceTypeId).getId());
+        typeMap.keySet().forEach(k -> ocCloudInstanceTypeService.deleteOcCloudInstanceById(typeMap.get(k).getId()));
     }
 
     private Map<String, OcCloudInstanceType> getInstanceTypeMap(List<OcCloudInstanceType> typeList) {

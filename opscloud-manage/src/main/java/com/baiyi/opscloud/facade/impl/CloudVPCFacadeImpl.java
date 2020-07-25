@@ -6,20 +6,20 @@ import com.baiyi.opscloud.cloud.vpc.ICloudVPC;
 import com.baiyi.opscloud.cloud.vpc.factory.CloudVPCFactory;
 import com.baiyi.opscloud.common.base.CloudType;
 import com.baiyi.opscloud.common.util.BeanCopierUtils;
-import com.baiyi.opscloud.decorator.CloudVPCDecorator;
+import com.baiyi.opscloud.decorator.cloud.CloudVPCDecorator;
 import com.baiyi.opscloud.domain.BusinessWrapper;
 import com.baiyi.opscloud.domain.DataTable;
 import com.baiyi.opscloud.domain.ErrorEnum;
-import com.baiyi.opscloud.domain.generator.OcCloudVpc;
-import com.baiyi.opscloud.domain.generator.OcCloudVpcSecurityGroup;
-import com.baiyi.opscloud.domain.generator.OcCloudVpcVswitch;
+import com.baiyi.opscloud.domain.generator.opscloud.OcCloudVpc;
+import com.baiyi.opscloud.domain.generator.opscloud.OcCloudVpcSecurityGroup;
+import com.baiyi.opscloud.domain.generator.opscloud.OcCloudVpcVswitch;
 import com.baiyi.opscloud.domain.param.cloud.CloudVPCParam;
 import com.baiyi.opscloud.domain.param.cloud.CloudVPCSecurityGroupParam;
 import com.baiyi.opscloud.domain.param.cloud.CloudVPCVSwitchParam;
-import com.baiyi.opscloud.domain.vo.cloud.OcCloudInstanceTemplateVO;
-import com.baiyi.opscloud.domain.vo.cloud.OcCloudVPCSecurityGroupVO;
-import com.baiyi.opscloud.domain.vo.cloud.OcCloudVPCVO;
-import com.baiyi.opscloud.domain.vo.cloud.OcCloudVSwitchVO;
+import com.baiyi.opscloud.domain.vo.cloud.CloudInstanceTemplateVO;
+import com.baiyi.opscloud.domain.vo.cloud.CloudVPCSecurityGroupVO;
+import com.baiyi.opscloud.domain.vo.cloud.CloudVPCVO;
+import com.baiyi.opscloud.domain.vo.cloud.CloudVSwitchVO;
 import com.baiyi.opscloud.facade.CloudVPCFacade;
 import com.baiyi.opscloud.service.cloud.OcCloudVpcSecurityGroupService;
 import com.baiyi.opscloud.service.cloud.OcCloudVpcService;
@@ -56,34 +56,31 @@ public class CloudVPCFacadeImpl implements CloudVPCFacade {
 
 
     @Override
-    public DataTable<OcCloudVPCVO.CloudVpc> fuzzyQueryCloudVPCPage(CloudVPCParam.PageQuery pageQuery) {
+    public DataTable<CloudVPCVO.CloudVpc> fuzzyQueryCloudVPCPage(CloudVPCParam.PageQuery pageQuery) {
         DataTable<OcCloudVpc> table = ocCloudVpcService.fuzzyQueryOcCloudVpcByParam(pageQuery);
-        List<OcCloudVPCVO.CloudVpc> page = BeanCopierUtils.copyListProperties(table.getData(), OcCloudVPCVO.CloudVpc.class);
-        DataTable<OcCloudVPCVO.CloudVpc> dataTable
-                = new DataTable<>(page.stream().map(e -> cloudVPCDecorator.decorator(e, pageQuery.getExtend())).collect(Collectors.toList()), table.getTotalNum());
-        return dataTable;
+        List<CloudVPCVO.CloudVpc> page = BeanCopierUtils.copyListProperties(table.getData(), CloudVPCVO.CloudVpc.class);
+        return new DataTable<>(page.stream().map(e -> cloudVPCDecorator.decorator(e, pageQuery.getExtend())).collect(Collectors.toList()), table.getTotalNum());
+
     }
 
     @Override
-    public DataTable<OcCloudVPCVO.CloudVpc> queryCloudVPCPage(CloudVPCParam.PageQuery pageQuery) {
+    public DataTable<CloudVPCVO.CloudVpc> queryCloudVPCPage(CloudVPCParam.PageQuery pageQuery) {
         DataTable<OcCloudVpc> table = ocCloudVpcService.fuzzyQueryOcCloudVpcByParam(pageQuery);
-        List<OcCloudVPCVO.CloudVpc> page = BeanCopierUtils.copyListProperties(table.getData(), OcCloudVPCVO.CloudVpc.class);
-        DataTable<OcCloudVPCVO.CloudVpc> dataTable
-                = new DataTable<>(page.stream().map(e -> cloudVPCDecorator.decorator(e, pageQuery.getZoneIds())).collect(Collectors.toList()), table.getTotalNum());
-        return dataTable;
+        List<CloudVPCVO.CloudVpc> page = BeanCopierUtils.copyListProperties(table.getData(), CloudVPCVO.CloudVpc.class);
+        return new DataTable<>(page.stream().map(e -> cloudVPCDecorator.decorator(e, pageQuery.getZoneIds())).collect(Collectors.toList()), table.getTotalNum());
     }
 
     @Override
-    public DataTable<OcCloudVPCSecurityGroupVO.SecurityGroup> queryCloudVPCSecurityGroupPage(CloudVPCSecurityGroupParam.PageQuery pageQuery) {
+    public DataTable<CloudVPCSecurityGroupVO.SecurityGroup> queryCloudVPCSecurityGroupPage(CloudVPCSecurityGroupParam.PageQuery pageQuery) {
         DataTable<OcCloudVpcSecurityGroup> table = ocCloudVpcSecurityGroupService.queryOcCloudVPCSecurityGroupByParam(pageQuery);
-        List<OcCloudVPCSecurityGroupVO.SecurityGroup> page = BeanCopierUtils.copyListProperties(table.getData(), OcCloudVPCSecurityGroupVO.SecurityGroup.class);
+        List<CloudVPCSecurityGroupVO.SecurityGroup> page = BeanCopierUtils.copyListProperties(table.getData(), CloudVPCSecurityGroupVO.SecurityGroup.class);
         return new DataTable<>(page, table.getTotalNum());
     }
 
     @Override
-    public DataTable<OcCloudVSwitchVO.VSwitch> queryCloudVPCVSwitchPage(CloudVPCVSwitchParam.PageQuery pageQuery) {
+    public DataTable<CloudVSwitchVO.VSwitch> queryCloudVPCVSwitchPage(CloudVPCVSwitchParam.PageQuery pageQuery) {
         DataTable<OcCloudVpcVswitch> table = ocCloudVpcVswitchService.queryOcCloudVPCVswitchByParam(pageQuery);
-        List<OcCloudVSwitchVO.VSwitch> page = BeanCopierUtils.copyListProperties(table.getData(), OcCloudVSwitchVO.VSwitch.class);
+        List<CloudVSwitchVO.VSwitch> page = BeanCopierUtils.copyListProperties(table.getData(), CloudVSwitchVO.VSwitch.class);
         return new DataTable<>(page, table.getTotalNum());
     }
 
@@ -123,7 +120,7 @@ public class CloudVPCFacadeImpl implements CloudVPCFacade {
     }
 
     @Override
-    public  BusinessWrapper<Boolean> setCloudVPCVSwitchActive(int id){
+    public BusinessWrapper<Boolean> setCloudVPCVSwitchActive(int id) {
         OcCloudVpcVswitch ocCloudVpcVswitch = ocCloudVpcVswitchService.queryOcCloudVpcVswitchById(id);
         if (ocCloudVpcVswitch == null)
             return new BusinessWrapper<>(ErrorEnum.CLOUD_VPC_VSWITCH_NOT_EXIST);
@@ -133,23 +130,22 @@ public class CloudVPCFacadeImpl implements CloudVPCFacade {
     }
 
     @Override
-    public List<OcCloudVSwitchVO.VSwitch> updateOcCloudVpcVSwitch(OcCloudInstanceTemplateVO.InstanceTemplate instanceTemplate, List<OcCloudInstanceTemplateVO.VSwitch> vswitchList) {
-        List<OcCloudVSwitchVO.VSwitch> result = Lists.newArrayList();
-        Set<String> vswitchIdSet = vswitchList.stream().map(OcCloudInstanceTemplateVO.VSwitch::getVswitchId).collect(Collectors.toSet());
-
+    public List<CloudVSwitchVO.VSwitch> updateOcCloudVpcVSwitch(CloudInstanceTemplateVO.InstanceTemplate instanceTemplate, List<CloudInstanceTemplateVO.VSwitch> vswitchList) {
+        List<CloudVSwitchVO.VSwitch> result = Lists.newArrayList();
+        Set<String> vswitchIdSet = vswitchList.stream().map(CloudInstanceTemplateVO.VSwitch::getVswitchId).collect(Collectors.toSet());
         if (instanceTemplate.getCloudType() == CloudType.ALIYUN.getType()) {
             Map<String, DescribeVSwitchesResponse.VSwitch> AliyunVPCVSwitchMap = getAliyunVPCVSwitchMap(instanceTemplate.getRegionId(), instanceTemplate.getVpcId());
-            List<OcCloudVpcVswitch> ocCloudVpcVswitchList = ocCloudVpcVswitchService.queryOcCloudVpcVswitchByVpcId(instanceTemplate.getVpcId());
-            for (OcCloudVpcVswitch ocCloudVpcVswitch : ocCloudVpcVswitchList) {
-                if (AliyunVPCVSwitchMap.containsKey(ocCloudVpcVswitch.getVswitchId())) {
-                    DescribeVSwitchesResponse.VSwitch vSwitch = AliyunVPCVSwitchMap.get(ocCloudVpcVswitch.getVswitchId());
-                    ocCloudVpcVswitch.setVswitchName(vSwitch.getVSwitchName());
-                    ocCloudVpcVswitch.setAvailableIpAddressCount(vSwitch.getAvailableIpAddressCount().intValue());
-                    ocCloudVpcVswitchService.updateOcCloudVpcVswitch(ocCloudVpcVswitch);
-                    if (vswitchIdSet.contains(ocCloudVpcVswitch.getVswitchId()))
-                        result.add(BeanCopierUtils.copyProperties(ocCloudVpcVswitch, OcCloudVSwitchVO.VSwitch.class));
+            ocCloudVpcVswitchService.queryOcCloudVpcVswitchByVpcId(instanceTemplate.getVpcId()).forEach(e -> {
+                if (AliyunVPCVSwitchMap.containsKey(e.getVswitchId())) {
+                    DescribeVSwitchesResponse.VSwitch vSwitch = AliyunVPCVSwitchMap.get(e.getVswitchId());
+                    e.setVswitchName(vSwitch.getVSwitchName());
+                    e.setAvailableIpAddressCount(vSwitch.getAvailableIpAddressCount().intValue());
+                    ocCloudVpcVswitchService.updateOcCloudVpcVswitch(e);
+                    if (vswitchIdSet.contains(e.getVswitchId()))
+                        result.add(BeanCopierUtils.copyProperties(e, CloudVSwitchVO.VSwitch.class));
                 }
-            }
+
+            });
         }
         return result;
     }

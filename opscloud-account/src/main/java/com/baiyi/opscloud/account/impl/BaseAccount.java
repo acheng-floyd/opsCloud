@@ -48,16 +48,18 @@ public abstract class BaseAccount implements InitializingBean, IAccount {
     @Resource
     protected OcUserCredentialService ocUserCredentialService;
 
-    private Boolean saveOcUserListByLdap(List<OcUser> ocUserList) {
-        Boolean result = true;
-        for (OcUser ocUser : ocUserList) {
-            if (!saveOcUser(ocUser))
-                result = false;
-        }
-        return result;
+    protected final static boolean GRANT =true;
+    protected final static boolean REVOKE =false;
+
+    protected OcAccount getAccount(OcUser ocUser) {
+        return ocAccountService.queryOcAccountByUsername(getAccountType(), ocUser.getUsername());
     }
 
-    private Boolean saveOcAccount(OcAccount preOcAccount, Map<String, OcAccount> map) {
+    private void saveOcUserListByLdap(List<OcUser> ocUserList) {
+        ocUserList.forEach(this::saveOcUser);
+    }
+
+    private void saveOcAccount(OcAccount preOcAccount, Map<String, OcAccount> map) {
         if (map.containsKey(preOcAccount.getAccountId())) {
             OcAccount account = map.get(preOcAccount.getAccountId());
             updateOcAccount(preOcAccount, account);
@@ -65,7 +67,6 @@ public abstract class BaseAccount implements InitializingBean, IAccount {
         } else {
             ocAccountService.addOcAccount(preOcAccount);
         }
-        return true;
     }
 
     /**
@@ -74,6 +75,8 @@ public abstract class BaseAccount implements InitializingBean, IAccount {
      */
     protected void updateOcAccount(OcAccount preOcAccount, OcAccount ocAccount) {
         preOcAccount.setId(ocAccount.getId());
+        if (!StringUtils.isEmpty(ocAccount.getPassword())) // 插入用户密码
+            preOcAccount.setPassword(ocAccount.getPassword());
         ocAccountService.updateOcAccount(preOcAccount);
     }
 
@@ -84,7 +87,6 @@ public abstract class BaseAccount implements InitializingBean, IAccount {
     }
 
     abstract protected int getAccountType();
-
 
     /**
      * 只更新ldap源，其它源只添加条目
@@ -130,24 +132,28 @@ public abstract class BaseAccount implements InitializingBean, IAccount {
      * @return
      */
     @Override
-    public Boolean sync() {
-        if (getKey().equals("LdapAccount"))
-            return saveOcUserListByLdap(getUserList());
+    public void sync() {
+        if (getKey().equals("LdapAccount")) {
+            saveOcUserListByLdap(getUserList());
+            return;
+        }
         List<OcAccount> accountList = getOcAccountList();
         Map<String, OcAccount> map = getAccountMap(null);
-        for (OcAccount account : accountList)
-            saveOcAccount(account, map);
+        accountList.forEach(e -> saveOcAccount(e, map));
         delAccountByMap(map);
-        return Boolean.TRUE;
     }
 
+    @Override
+    public Boolean sync(OcUser user) {
+        return true;
+    }
 
     private void delAccountByMap(Map<String, OcAccount> accountMap) {
         if (accountMap.isEmpty()) return;
-        for (String key : accountMap.keySet()) {
-            OcAccount ocAccount = accountMap.get(key);
+        accountMap.keySet().forEach(k -> {
+            OcAccount ocAccount = accountMap.get(k);
             ocAccountService.delOcAccount(ocAccount.getId());
-        }
+        });
     }
 
 

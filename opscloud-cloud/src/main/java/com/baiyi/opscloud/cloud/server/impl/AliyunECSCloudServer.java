@@ -3,9 +3,10 @@ package com.baiyi.opscloud.cloud.server.impl;
 import com.aliyuncs.ecs.model.v20140526.DescribeInstancesResponse;
 import com.baiyi.opscloud.aliyun.ecs.AliyunECS;
 import com.baiyi.opscloud.cloud.server.ICloudServer;
-import com.baiyi.opscloud.cloud.server.builder.OcCloudServerBuilder;
+import com.baiyi.opscloud.cloud.server.builder.CloudServerBuilder;
 import com.baiyi.opscloud.cloud.server.decorator.AliyunECSInstanceDecorator;
 import com.baiyi.opscloud.cloud.server.instance.AliyunECSInstance;
+import com.baiyi.opscloud.common.base.CloudServerPowerStatus;
 import com.baiyi.opscloud.common.base.CloudServerType;
 import com.baiyi.opscloud.domain.BusinessWrapper;
 import com.baiyi.opscloud.domain.generator.opscloud.OcCloudServer;
@@ -35,8 +36,6 @@ public class AliyunECSCloudServer<T> extends BaseCloudServer<T> implements IClou
     protected List<T> getInstanceList() {
         return getInstanceList(aliyunECS.getInstanceList());
     }
-
-
 
     @Override
     protected T getInstance(String regionId, String instanceId) {
@@ -71,13 +70,36 @@ public class AliyunECSCloudServer<T> extends BaseCloudServer<T> implements IClou
     protected OcCloudServer getCloudServer(T instance) {
         if (!(instance instanceof AliyunECSInstance)) return null;
         AliyunECSInstance i = (AliyunECSInstance) instance;
-        return OcCloudServerBuilder.build(i, getInstanceDetail(instance));
+        return CloudServerBuilder.build(i, getInstanceDetail(instance));
     }
 
     @Override
-    protected BusinessWrapper<Boolean> power(OcCloudServer ocCloudserver, Boolean action) {
-        return aliyunECS.power(ocCloudserver.getZone(), ocCloudserver.getInstanceId(), action);
+    protected BusinessWrapper<Boolean> power(OcCloudServer ocCloudServer, Boolean action) {
+        return aliyunECS.power(ocCloudServer.getRegionId(), ocCloudServer.getInstanceId(), action);
     }
 
+    protected int getPowerStatus(String regionId, String instanceId) {
+        DescribeInstancesResponse.Instance instance = aliyunECS.getInstance(regionId, instanceId);
+        if (instance == null)
+            return -1;
+        instance.getStatus();
+        return getPowerStatus(instance.getStatus());
+    }
 
+    private int getPowerStatus(String status) {
+        if ("Running".equalsIgnoreCase(status))
+            return CloudServerPowerStatus.RUNNING.getStatus();
+        if ("Stopped".equalsIgnoreCase(status))
+            return CloudServerPowerStatus.STOPPED.getStatus();
+        if ("Starting".equalsIgnoreCase(status))
+            return CloudServerPowerStatus.STARTING.getStatus();
+        if ("Stopping".equalsIgnoreCase(status))
+            return CloudServerPowerStatus.STOPPING.getStatus();
+        return -1;
+    }
+
+    @Override
+    protected Boolean delete(OcCloudServer ocCloudServer) {
+        return aliyunECS.delete(ocCloudServer.getRegionId(), ocCloudServer.getInstanceId());
+    }
 }

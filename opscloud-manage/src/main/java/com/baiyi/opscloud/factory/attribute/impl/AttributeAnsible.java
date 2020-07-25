@@ -2,11 +2,13 @@ package com.baiyi.opscloud.factory.attribute.impl;
 
 import com.baiyi.opscloud.common.base.CloudServerType;
 import com.baiyi.opscloud.common.base.Global;
+import com.baiyi.opscloud.common.base.SettingName;
 import com.baiyi.opscloud.common.config.CachingConfig;
 import com.baiyi.opscloud.domain.generator.opscloud.OcServer;
 import com.baiyi.opscloud.domain.generator.opscloud.OcServerGroup;
 import com.baiyi.opscloud.domain.vo.server.PreviewAttributeVO;
-import com.baiyi.opscloud.facade.ServerFacade;
+import com.baiyi.opscloud.facade.ServerBaseFacade;
+import com.baiyi.opscloud.facade.SettingBaseFacade;
 import com.baiyi.opscloud.server.facade.ServerAttributeFacade;
 import com.baiyi.opscloud.service.server.OcServerGroupService;
 import com.baiyi.opscloud.service.server.OcServerService;
@@ -40,11 +42,10 @@ public class AttributeAnsible extends AttributeBase {
     private OcServerService ocServerService;
 
     @Resource
-    private ServerFacade serverFacade;
+    private SettingBaseFacade settingFacade;
 
     @Resource
     private ServerAttributeFacade serverAttributeFacade;
-
 
     /**
      * 清空缓存
@@ -85,7 +86,7 @@ public class AttributeAnsible extends AttributeBase {
     @Cacheable(cacheNames = CachingConfig.CACHE_NAME_ATTRIBUTE_CACHE_REPO, key = "'build_' + #ocServerGroup.id")
     public PreviewAttributeVO.PreviewAttribute build(OcServerGroup ocServerGroup) {
         // 跳过空服务器组
-        if(ocServerService.countByServerGroupId(ocServerGroup.getId()) == 0)
+        if (ocServerService.countByServerGroupId(ocServerGroup.getId()) == 0)
             return PreviewAttributeVO.PreviewAttribute.builder().build();
         Map<String, List<OcServer>> serverMap = grouping(ocServerGroup, true);
         String content = format(ocServerGroup, serverMap);
@@ -108,30 +109,36 @@ public class AttributeAnsible extends AttributeBase {
         return result;
     }
 
-
     private String format(OcServerGroup ocServerGroup, Map<String, List<OcServer>> serverMap) {
         String comment = ocServerGroup.getComment();
         if (StringUtils.isEmpty(comment))
             comment = ocServerGroup.getName();
-        String result = "# " + comment + "\n";
-        for (String key : serverMap.keySet()) {
-            result += Joiner.on("").join("[", key, "]\n");
-            List<OcServer> serverList = serverMap.get(key);
-            for (OcServer server : serverList)
-                result += acqHostLine(server);
-            result += "\n";
-        }
+        StringBuilder result = new StringBuilder("# " + comment + "\n");
 
-        return result;
+        serverMap.keySet().forEach(k -> {
+            result.append(Joiner.on("").join("[", k, "]\n"));
+            List<OcServer> serverList = serverMap.get(k);
+            serverList.forEach(s -> result.append(acqHostLine(s)));
+            result.append("\n");
+        });
+        return result.toString();
     }
 
     private String acqHostLine(OcServer ocServer) {
-        String serverName = serverFacade.acqServerName(ocServer);
-        return Joiner.on(" ").join(getManageIp(ocServer),
-                "ansible_ssh_user=" + ocServer.getLoginUser(),
-                "cloudServerType=" + getCloudServerType(ocServer),
-                "hostname=" + serverName,
+        String serverName = ServerBaseFacade.acqServerName(ocServer);
+        // 支持自定义端口
+        String port = serverAttributeFacade.getSSHPort(ocServer);
+        return Joiner.on(" ").skipNulls().join(getManageIp(ocServer),
+                link("ansible_ssh_user", settingFacade.querySetting(SettingName.SERVER_HIGH_AUTHORITY_ACCOUNT)),
+                link("ansible_ssh_port", "22".equalsIgnoreCase(port) ? null : port),
+                link("cloudServerType", getCloudServerType(ocServer)),
+                link("hostname", serverName),
                 "#", serverName, "\n");
+    }
+
+    private String link(String k, String v) {
+        if (StringUtils.isEmpty(v)) return null;
+        return Joiner.on("=").join(k, v);
     }
 
     private String getCloudServerType(OcServer ocServer) {
@@ -184,24 +191,24 @@ public class AttributeAnsible extends AttributeBase {
         int subgroup = getSubgroup(ocServerGroup);
 
         Set<String> keSet = Sets.newHashSet(serverMap.keySet());
-        for (String key : keSet) {
-            List<OcServer> servers = serverMap.get(key);
+        keSet.forEach(k -> {
+            List<OcServer> servers = serverMap.get(k);
             if (servers.size() >= 2) {
-                groupingSubgroup(serverMap, servers, key, subgroup);
-                serverMap.remove(key);
+                groupingSubgroup(serverMap, servers, k, subgroup);
+                serverMap.remove(k);
             }
-        }
+        });
         return serverMap;
     }
 
     private void groupingSubgroup(Map<String, List<OcServer>> serverMap, int subgroup) {
         if (serverMap.isEmpty()) return;
-        Set<String> keSet = Sets.newHashSet(serverMap.keySet());
-        for (String key : keSet) {
-            List<OcServer> servers = serverMap.get(key);
+        Set<String> keySet = Sets.newHashSet(serverMap.keySet());
+        keySet.forEach(k -> {
+            List<OcServer> servers = serverMap.get(k);
             if (servers.size() >= 2)
-                groupingSubgroup(serverMap, servers, key, subgroup);
-        }
+                groupingSubgroup(serverMap, servers, k, subgroup);
+        });
     }
 
     private void groupingSubgroup(Map<String, List<OcServer>> serverMap, List<OcServer> serverList, String groupingName, int subgroup) {
@@ -228,10 +235,10 @@ public class AttributeAnsible extends AttributeBase {
             return defSubgroup;
         String subgroup = attributeMap.get(Global.SERVER_ATTRIBUTE_ANSIBLE_SUBGROUP);
         try {
-            int n = Integer.valueOf(subgroup);
+            int n = Integer.parseInt(subgroup);
             if (n > 2)
                 return n;
-        } catch (Exception e) {
+        } catch (Exception ignored) {
         }
         return defSubgroup;
     }

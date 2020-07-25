@@ -8,12 +8,11 @@ import com.baiyi.opscloud.common.config.serverAttribute.ServerAttribute;
 import com.baiyi.opscloud.common.redis.RedisUtil;
 import com.baiyi.opscloud.common.util.BeanCopierUtils;
 import com.baiyi.opscloud.common.util.ServerAttributeUtils;
-import com.baiyi.opscloud.common.util.TimeUtils;
 import com.baiyi.opscloud.domain.BusinessWrapper;
 import com.baiyi.opscloud.domain.generator.opscloud.OcServer;
 import com.baiyi.opscloud.domain.generator.opscloud.OcServerAttribute;
 import com.baiyi.opscloud.domain.generator.opscloud.OcServerGroup;
-import com.baiyi.opscloud.domain.vo.server.OcServerAttributeVO;
+import com.baiyi.opscloud.domain.vo.server.ServerAttributeVO;
 import com.baiyi.opscloud.server.builder.ServerAttributeBuilder;
 import com.baiyi.opscloud.server.decorator.ServerAttributeDecorator;
 import com.baiyi.opscloud.server.facade.ServerAttributeFacade;
@@ -47,18 +46,16 @@ public class ServerAttributeFacadeImpl implements ServerAttributeFacade {
     private OcServerAttributeService ocServerAttributeService;
 
     @Override
-    public List<OcServerAttributeVO.ServerAttribute> queryServerGroupAttribute(OcServerGroup ocServerGroup) {
-        return BeanCopierUtils.copyListProperties(getServerGroupAttribute(ocServerGroup), OcServerAttributeVO.ServerAttribute.class);
+    public List<ServerAttributeVO.ServerAttribute> queryServerGroupAttribute(OcServerGroup ocServerGroup) {
+        return BeanCopierUtils.copyListProperties(getServerGroupAttribute(ocServerGroup), ServerAttributeVO.ServerAttribute.class);
     }
 
     public List<OcServerAttribute> getServerAttribute(OcServer ocServer) {
         List<OcServerAttribute> serverAttributeList = Lists.newArrayList();
         // 服务器组属性
-        List<OcServerAttribute> list = getServerGroupAttribute(getOcServerGroup(ocServer));
-        for (OcServerAttribute serverGroupAttribute : list) {
+        getServerGroupAttribute(getOcServerGroup(ocServer)).forEach(e -> {
             // serverGroup的属性配置
-            AttributeGroup ag = ServerAttributeUtils.convert(serverGroupAttribute.getAttributes());
-
+            AttributeGroup ag = ServerAttributeUtils.convert(e.getAttributes());
             OcServerAttribute ocServerAttribute = ServerAttributeBuilder.build(ag.getName(), BusinessType.SERVER.getType(), ocServer.getId());
             OcServerAttribute preServerAttribute = ocServerAttributeService.queryOcServerAttributeByUniqueKey(ocServerAttribute);
             if (preServerAttribute == null) {
@@ -69,13 +66,13 @@ public class ServerAttributeFacadeImpl implements ServerAttributeFacade {
                 try {
                     AttributeGroup attributeGroup = ServerAttributeUtils.convert(preServerAttribute.getAttributes());
                     serverAttributeList.add(ServerAttributeBuilder.build(preServerAttribute.getId(), ServerAttributeDecorator.decorator(ag, attributeGroup), ocServer));
-                } catch (Exception e) {
+                } catch (Exception ex) {
                     // 数据格式错误，删除数据后生成默认配置项
                     ocServerAttributeService.deleteOcServerAttributeById(preServerAttribute.getId());
                     serverAttributeList.add(ServerAttributeBuilder.build(ag, ocServer));
                 }
             }
-        }
+        });
         return serverAttributeList;
     }
 
@@ -87,8 +84,7 @@ public class ServerAttributeFacadeImpl implements ServerAttributeFacade {
 
     public List<OcServerAttribute> getServerGroupAttribute(OcServerGroup ocServerGroup) {
         List<OcServerAttribute> serverAttributeList = Lists.newArrayList();
-        List<AttributeGroup> attributeGroups = attributeConfig.getGroups();
-        for (AttributeGroup ag : attributeGroups) {
+        attributeConfig.getGroups().forEach(ag -> {
             OcServerAttribute ocServerAttribute = ServerAttributeBuilder.build(ag.getName(), BusinessType.SERVERGROUP.getType(), ocServerGroup.getId());
             OcServerAttribute preServerAttribute = ocServerAttributeService.queryOcServerAttributeByUniqueKey(ocServerAttribute);
             if (preServerAttribute == null) {
@@ -105,13 +101,13 @@ public class ServerAttributeFacadeImpl implements ServerAttributeFacade {
                     serverAttributeList.add(ServerAttributeBuilder.build(ag, ocServerGroup));
                 }
             }
-        }
+        });
         return serverAttributeList;
     }
 
     @Override
-    public List<OcServerAttributeVO.ServerAttribute> queryServerAttribute(OcServer ocServer) {
-        return BeanCopierUtils.copyListProperties(getServerAttribute(ocServer), OcServerAttributeVO.ServerAttribute.class);
+    public List<ServerAttributeVO.ServerAttribute> queryServerAttribute(OcServer ocServer) {
+        return BeanCopierUtils.copyListProperties(getServerAttribute(ocServer), ServerAttributeVO.ServerAttribute.class);
     }
 
     @Override
@@ -121,12 +117,11 @@ public class ServerAttributeFacadeImpl implements ServerAttributeFacade {
 
     @Override
     public void deleteServerAttributeByList(List<OcServerAttribute> serverAttributeList) {
-        for (OcServerAttribute serverAttribute : serverAttributeList)
-            ocServerAttributeService.deleteOcServerAttributeById(serverAttribute.getId());
+        serverAttributeList.forEach(e -> ocServerAttributeService.deleteOcServerAttributeById(e.getId()));
     }
 
     @Override
-    public BusinessWrapper<Boolean> saveServerAttribute(OcServerAttributeVO.ServerAttribute serverAttribute) {
+    public BusinessWrapper<Boolean> saveServerAttribute(ServerAttributeVO.ServerAttribute serverAttribute) {
         OcServerAttribute preServerAttribute = BeanCopierUtils.copyProperties(serverAttribute, OcServerAttribute.class);
         OcServerAttribute checkServerAttribute = ocServerAttributeService.queryOcServerAttributeByUniqueKey(preServerAttribute);
         if (checkServerAttribute == null) {
@@ -134,6 +129,12 @@ public class ServerAttributeFacadeImpl implements ServerAttributeFacade {
         } else {
             preServerAttribute.setId(checkServerAttribute.getId());
             ocServerAttributeService.updateOcServerAttribute(preServerAttribute);
+        }
+        if (serverAttribute.getBusinessType() == BusinessType.SERVER.getType()) {
+            redisUtil.del(getServerCacheKey(serverAttribute.getBusinessId()));
+        }
+        if (serverAttribute.getBusinessType() == BusinessType.SERVERGROUP.getType()) {
+            redisUtil.del(getServerGroupCacheKey(serverAttribute.getBusinessId()));
         }
         return BusinessWrapper.SUCCESS;
     }
@@ -145,13 +146,12 @@ public class ServerAttributeFacadeImpl implements ServerAttributeFacade {
         if (serverGroupAttributeMap != null && !serverGroupAttributeMap.isEmpty())
             return serverGroupAttributeMap;
         serverGroupAttributeMap = Maps.newHashMap();
-        List<OcServerAttributeVO.ServerAttribute> list = queryServerGroupAttribute(ocServerGroup);
-        for (OcServerAttributeVO.ServerAttribute sa : list) {
+        List<ServerAttributeVO.ServerAttribute> list = queryServerGroupAttribute(ocServerGroup);
+        for (ServerAttributeVO.ServerAttribute sa : list) {
             AttributeGroup attributeGroup = ServerAttributeUtils.convert(sa.getAttributes());
-            serverGroupAttributeMap.putAll(toServerAttributeMap(attributeGroup.getAttributes()));
+            serverGroupAttributeMap.putAll(convertServerAttributeMap(attributeGroup.getAttributes()));
         }
-        redisUtil.set(key, serverGroupAttributeMap, TimeUtils.dayTime * 7);
-        //   list.stream().collect(Collectors.toMap(ServerAttribute::getName, a -> a, (k1, k2) -> k1));
+        redisUtil.set(key, serverGroupAttributeMap, 60 * 60 * 24 * 7);
         return serverGroupAttributeMap;
     }
 
@@ -162,17 +162,17 @@ public class ServerAttributeFacadeImpl implements ServerAttributeFacade {
         if (serverAttributeMap != null && !serverAttributeMap.isEmpty())
             return serverAttributeMap;
         serverAttributeMap = Maps.newHashMap();
-        List<OcServerAttributeVO.ServerAttribute> list = queryServerAttribute(ocServer);
-        for (OcServerAttributeVO.ServerAttribute sa : list) {
+        List<ServerAttributeVO.ServerAttribute> list = queryServerAttribute(ocServer);
+        for (ServerAttributeVO.ServerAttribute sa : list) {
             AttributeGroup attributeGroup = ServerAttributeUtils.convert(sa.getAttributes());
-            serverAttributeMap.putAll(toServerAttributeMap(attributeGroup.getAttributes()));
+            serverAttributeMap.putAll(convertServerAttributeMap(attributeGroup.getAttributes()));
         }
-        redisUtil.set(key, serverAttributeMap, TimeUtils.dayTime * 7);
+        redisUtil.set(key, serverAttributeMap, 60 * 60 * 24 * 7);
         return serverAttributeMap;
     }
 
 
-    private Map<String, String> toServerAttributeMap(List<ServerAttribute> list) {
+    private Map<String, String> convertServerAttributeMap(List<ServerAttribute> list) {
         if (list == null || list.isEmpty())
             return Maps.newHashMap();
         return list.stream().collect(Collectors.toMap(ServerAttribute::getName, ServerAttribute::getValue, (k1, k2) -> k1));
@@ -199,6 +199,16 @@ public class ServerAttributeFacadeImpl implements ServerAttributeFacade {
                 return ocServer.getPublicIp();
         }
         return ocServer.getPrivateIp();
+    }
+
+    @Override
+    public String getSSHPort(OcServer ocServer) {
+        Map<String, String> map = getServerAttributeMap(ocServer);
+        if (map == null)
+            return "22";
+        if (map.containsKey(Global.SERVER_ATTRIBUTE_GLOBAL_SSH_PORT))
+            return map.get(Global.SERVER_ATTRIBUTE_GLOBAL_SSH_PORT);
+        return "22";
     }
 
 }

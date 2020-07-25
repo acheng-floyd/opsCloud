@@ -54,18 +54,19 @@ public interface JumpserverCenter {
 
     void updateAssetsAsset(AssetsAsset assetsAsset);
 
-    void addAssetsAsset(AssetsAsset assetsAsset);
+    void addAssetsAsset(AssetsAsset assetsAsset,String nodeId);
 
     void bindAssetsAssetNodes(AssetsAsset assetsAsset, AssetsNode assetsNode);
 
     void bindAvssetsSystemuserAssets(String assetId);
+
+    boolean delAssetsAsset(String assetId);
 
     boolean activeUsersUser(String username, boolean active);
 
     boolean delUsersUser(String username);
 
     boolean updateUsersUser(OcUser ocUser);
-
 
 
     BusinessWrapper<Boolean> setUserActive(String id);
@@ -76,6 +77,7 @@ public interface JumpserverCenter {
 
     /**
      * 校验用户公钥是否存在
+     *
      * @param username
      * @return
      */

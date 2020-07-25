@@ -4,7 +4,7 @@ import com.baiyi.opscloud.cloud.account.CloudAccount;
 import com.baiyi.opscloud.cloud.image.ICloudImage;
 import com.baiyi.opscloud.cloud.image.factory.CloudImageFactory;
 import com.baiyi.opscloud.common.util.JSONUtils;
-import com.baiyi.opscloud.domain.generator.OcCloudImage;
+import com.baiyi.opscloud.domain.generator.opscloud.OcCloudImage;
 import com.baiyi.opscloud.service.cloud.OcCloudImageService;
 import com.google.common.collect.Lists;
 import lombok.extern.slf4j.Slf4j;
@@ -32,10 +32,7 @@ public abstract class BaseCloudImage<T> implements InitializingBean, ICloudImage
         CloudAccount cloudAccount = getCloudAccount();
         if (cloudAccount == null) return Boolean.FALSE;
         Map<String, OcCloudImage> cloudImageMap = getCloudImageMap(Lists.newArrayList());
-        List<T> cloudImageList = getCloudImageList();
-        for (T cloudImage : cloudImageList)
-            saveOcCloudImage(cloudAccount, cloudImage, cloudImageMap);
-
+       getCloudImageList().forEach(i->saveOcCloudImage(cloudAccount, i, cloudImageMap));
         return Boolean.TRUE;
     }
 

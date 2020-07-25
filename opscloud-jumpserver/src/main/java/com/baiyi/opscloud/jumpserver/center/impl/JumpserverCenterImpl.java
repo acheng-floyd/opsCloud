@@ -1,7 +1,6 @@
 package com.baiyi.opscloud.jumpserver.center.impl;
 
-import com.baiyi.opscloud.common.base.Global;
-import com.baiyi.opscloud.common.redis.RedisUtil;
+import com.baiyi.opscloud.common.base.SettingName;
 import com.baiyi.opscloud.common.util.BeanCopierUtils;
 import com.baiyi.opscloud.common.util.UUIDUtils;
 import com.baiyi.opscloud.domain.BusinessWrapper;
@@ -9,7 +8,9 @@ import com.baiyi.opscloud.domain.ErrorEnum;
 import com.baiyi.opscloud.domain.generator.jumpserver.*;
 import com.baiyi.opscloud.domain.generator.opscloud.OcServerGroup;
 import com.baiyi.opscloud.domain.generator.opscloud.OcUser;
+import com.baiyi.opscloud.facade.SettingBaseFacade;
 import com.baiyi.opscloud.jumpserver.api.JumpserverAPI;
+import com.baiyi.opscloud.jumpserver.api.JumpserverAssetAPI;
 import com.baiyi.opscloud.jumpserver.bo.UsersUsergroupBO;
 import com.baiyi.opscloud.jumpserver.builder.AssetsNodeBuilder;
 import com.baiyi.opscloud.jumpserver.builder.PermsAssetpermissionBuilder;
@@ -21,10 +22,11 @@ import com.google.common.base.Joiner;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
 
 import javax.annotation.Resource;
-import java.util.Map;
+import java.util.List;
 
 /**
  * @Author baiyi
@@ -32,7 +34,7 @@ import java.util.Map;
  * @Version 1.0
  */
 @Slf4j
-@Component("JumpserverUserCenter")
+@Component("JumpserverCenter")
 public class JumpserverCenterImpl implements JumpserverCenter {
 
     @Resource
@@ -69,10 +71,16 @@ public class JumpserverCenterImpl implements JumpserverCenter {
     private AssetsSystemuserAssetsService assetsSystemuserAssetsService;
 
     @Resource
-    private RedisUtil redisUtil;
+    private OpsAdhocHostsService opsAdhocHostsService;
+
+    @Resource
+    private SettingBaseFacade settingBaseFacade;
 
     @Resource
     private JumpserverAPI jumpserverAPI;
+
+    @Resource
+    private JumpserverAssetAPI jumpserverAssetAPI;
 
     public static final String DATE_EXPIRED = "2089-01-01 00:00:00";
     // 管理员用户组 绑定 根节点
@@ -125,8 +133,6 @@ public class JumpserverCenterImpl implements JumpserverCenter {
         return usersUsergroup;
     }
 
-
-
     /**
      * 创建Jumpserver用户
      *
@@ -147,8 +153,10 @@ public class JumpserverCenterImpl implements JumpserverCenter {
             }
         } else {
             if (checkUsersUser.getEmail().equals(ocUser.getEmail())) {
-                usersUser = UsersUserBuilder.build(ocUser);
+                usersUser = UsersUserBuilder.build(ocUser, checkUsersUser.getRole());
                 usersUser.setId(checkUsersUser.getId());
+                if (!StringUtils.isEmpty(checkUsersUser.getPublicKey())) // 写入publicKey
+                    usersUser.setPublicKey(checkUsersUser.getPublicKey());
                 usersUserService.updateUsersUser(usersUser);
             }
         }
@@ -179,11 +187,10 @@ public class JumpserverCenterImpl implements JumpserverCenter {
      */
     private String getAssetsNodeKey() {
         AssetsNode lastNode = assetsNodeService.queryAssetsNodeLastOne();
-        //jumpserverDao.getAssetsNodeLastOne();
         String[] keys = lastNode.getKey().split(":");
         if (keys.length == 1)
             return "1:1";
-        int k = Integer.valueOf(keys[1]);
+        int k = Integer.parseInt(keys[1]);
         String keyName;
         while (true) {
             k++;
@@ -217,9 +224,8 @@ public class JumpserverCenterImpl implements JumpserverCenter {
      */
     private void bindPermsAssetpermissionSystemUsers(PermsAssetpermission permsAssetpermission) {
         String systemuserId = getSystemuserId();
-        if (StringUtils.isEmpty(systemuserId))
-            return;
-        bindPermsAssetpermissionAdminSystemUsers(permsAssetpermission, systemuserId);
+        if (!StringUtils.isEmpty(systemuserId))
+            bindPermsAssetpermissionAdminSystemUsers(permsAssetpermission, systemuserId);
     }
 
     /**
@@ -251,12 +257,7 @@ public class JumpserverCenterImpl implements JumpserverCenter {
      * @return
      */
     private String getSystemuserId() {
-        Map<String, String> settingsMap = (Map<String, String>) redisUtil.get(Global.JUMPSERVER_SETTINGS_KEY);
-        if (settingsMap != null) {
-            if (settingsMap.containsKey(Global.JUMPSERVER_ASSETS_SYSTEMUSER_ID_KEY))
-                return settingsMap.get(Global.JUMPSERVER_ASSETS_SYSTEMUSER_ID_KEY);
-        }
-        return "";
+        return settingBaseFacade.querySetting(SettingName.JUMPSERVER_ASSETS_SYSTEMUSER_ID);
     }
 
     /**
@@ -265,12 +266,7 @@ public class JumpserverCenterImpl implements JumpserverCenter {
      * @return
      */
     private String getAdminSystemuserId() {
-        Map<String, String> settingsMap = (Map<String, String>) redisUtil.get(Global.JUMPSERVER_SETTINGS_KEY);
-        if (settingsMap != null) {
-            if (settingsMap.containsKey(Global.JUMPSERVER_ASSETS_ADMIN_SYSTEMUSER_ID_KEY))
-                return settingsMap.get(Global.JUMPSERVER_ASSETS_ADMIN_SYSTEMUSER_ID_KEY);
-        }
-        return "";
+        return settingBaseFacade.querySetting(SettingName.JUMPSERVER_ASSETS_ADMIN_SYSTEMUSER_ID);
     }
 
     /**
@@ -323,8 +319,11 @@ public class JumpserverCenterImpl implements JumpserverCenter {
     }
 
     @Override
-    public void addAssetsAsset(AssetsAsset assetsAsset) {
-        assetsAssetService.addAssetsAsset(assetsAsset);
+    public void addAssetsAsset(AssetsAsset assetsAsset, String nodeId) {
+        // 新增资产 写库
+        // assetsAssetService.addAssetsAsset(assetsAsset);
+        // API
+        jumpserverAssetAPI.createAsset(assetsAsset, nodeId);
     }
 
 
@@ -347,7 +346,11 @@ public class JumpserverCenterImpl implements JumpserverCenter {
                 return;
             assetsAssetNodesService.delAssetsAssetNodes(assetsAssetNodes.getId());
         } else {
-            assetsAssetNodesService.addAssetsAssetNodes(pre);
+            try {
+                assetsAssetNodesService.addAssetsAssetNodes(pre);
+            } catch (Exception ignored) {
+            }
+
         }
     }
 
@@ -357,20 +360,64 @@ public class JumpserverCenterImpl implements JumpserverCenter {
     @Override
     public void bindAvssetsSystemuserAssets(String assetId) {
         String systemuserId = getSystemuserId();
+        if (StringUtils.isEmpty(systemuserId)) return;
+
         AssetsSystemuserAssets pre = new AssetsSystemuserAssets();
         pre.setSystemuserId(systemuserId);
         pre.setAssetId(assetId);
 
         AssetsSystemuserAssets assetsSystemuserAssets = assetsSystemuserAssetsService.queryAssetsSystemuserAssetsByUniqueKey(pre);
         if (assetsSystemuserAssets == null)
-            assetsSystemuserAssetsService.addAssetsSystemuserAssets(pre);
+            try {
+                assetsSystemuserAssetsService.addAssetsSystemuserAssets(pre);
+            } catch (Exception e) {
+                // 此错误不需要处理，由于通过API创建资产，不需要绑定账户
+            }
+    }
+
+    @Override
+    public boolean delAssetsAsset(String assetId) {
+        log.info("Jumpserver删除资产，assetId={}", assetId);
+        try {
+            // 删除资产节点绑定关系
+            AssetsAssetNodes assetsAssetNodes = assetsAssetNodesService.queryAssetsAssetNodesByAssetId(assetId);
+            if (assetsAssetNodes != null)
+                assetsAssetNodesService.delAssetsAssetNodes(assetsAssetNodes.getId());
+        } catch (Exception e) {
+            log.error("删除资产节点绑定关系错误，{}", e.getMessage());
+        }
+
+        try {
+            // 删除资产账户绑定
+            assetsSystemuserAssetsService.deleteAssetsSystemuserAssetsByAssetId(assetId);
+        } catch (Exception e) {
+            log.error("删除资产账户绑定关系错误，{}", e.getMessage());
+        }
+
+        try {
+            List<OpsAdhocHosts> list = opsAdhocHostsService.queryOpsAdhocHostsByAssetId(assetId);
+            if (!CollectionUtils.isEmpty(list))
+                list.forEach(e -> opsAdhocHostsService.deleteOpsAdhocHostsById(e.getId()));
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        try {
+            // 删除资产账户绑定
+            assetsAssetService.deleteAssetsAssetById(assetId);
+            return true;
+        } catch (Exception e) {
+            log.error("删除资产账户绑定错误，{}", e.getMessage());
+            return false;
+        }
     }
 
     @Override
     public boolean activeUsersUser(String username, boolean active) {
         log.info("JUMPSERVER设置用Active,username = {}, active = {}", username, active);
         UsersUser usersUser = usersUserService.queryUsersUserByUsername(username);
-        if (usersUser == null) return false;
+        if (usersUser == null)
+            return !active; // 账户不存在无需禁用
         usersUser.setIsActive(active);
         usersUserService.updateUsersUser(usersUser);
         return true;
@@ -409,7 +456,7 @@ public class JumpserverCenterImpl implements JumpserverCenter {
     public BusinessWrapper<Boolean> setUserActive(String id) {
         UsersUser usersUser = usersUserService.queryUsersUserById(id);
         if (usersUser == null)
-            return new BusinessWrapper(false);
+            return new BusinessWrapper(ErrorEnum.USER_NOT_EXIST);
         usersUser.setIsActive(!usersUser.getIsActive());
         usersUserService.updateUsersUser(usersUser);
         return BusinessWrapper.SUCCESS;
@@ -478,7 +525,7 @@ public class JumpserverCenterImpl implements JumpserverCenter {
             if (usersUser == null) return false;
             if (!StringUtils.isEmpty(usersUser.getPublicKey()))
                 return true;
-        } catch (Exception e) {
+        } catch (Exception ignored) {
         }
         return false;
     }

@@ -2,11 +2,18 @@ package com.baiyi.opscloud.facade;
 
 import com.baiyi.opscloud.domain.BusinessWrapper;
 import com.baiyi.opscloud.domain.DataTable;
-import com.baiyi.opscloud.domain.generator.OcAnsiblePlaybook;
+import com.baiyi.opscloud.domain.generator.opscloud.OcServerTask;
 import com.baiyi.opscloud.domain.param.ansible.AnsiblePlaybookParam;
+import com.baiyi.opscloud.domain.param.ansible.AnsibleScriptParam;
+import com.baiyi.opscloud.domain.param.ansible.ServerTaskHistoryParam;
 import com.baiyi.opscloud.domain.param.server.ServerTaskExecutorParam;
-import com.baiyi.opscloud.domain.vo.ansible.OcAnsiblePlaybookVO;
-import com.baiyi.opscloud.domain.vo.server.OcServerTaskVO;
+import com.baiyi.opscloud.domain.vo.ansible.AnsiblePlaybookVO;
+import com.baiyi.opscloud.domain.vo.ansible.AnsibleScriptVO;
+import com.baiyi.opscloud.domain.vo.ansible.AnsibleVersionVO;
+import com.baiyi.opscloud.domain.vo.preview.PreviewFileVO;
+import com.baiyi.opscloud.domain.vo.server.ServerTaskVO;
+
+import javax.validation.Valid;
 
 /**
  * @Author baiyi
@@ -15,30 +22,39 @@ import com.baiyi.opscloud.domain.vo.server.OcServerTaskVO;
  */
 public interface ServerTaskFacade {
 
-    DataTable<OcAnsiblePlaybookVO.AnsiblePlaybook> queryPlaybookPage(AnsiblePlaybookParam.PageQuery pageQuery);
+    DataTable<ServerTaskVO.ServerTask> queryTaskHistoryPage(@Valid ServerTaskHistoryParam.PageQuery pageQuery);
 
-    BusinessWrapper<Boolean> addPlaybook(OcAnsiblePlaybookVO.AnsiblePlaybook ansiblePlaybook);
+    DataTable<AnsiblePlaybookVO.AnsiblePlaybook> queryPlaybookPage(AnsiblePlaybookParam.PageQuery pageQuery);
 
-    BusinessWrapper<Boolean> updatePlaybook(OcAnsiblePlaybookVO.AnsiblePlaybook ansiblePlaybook);
+    DataTable<AnsibleScriptVO.AnsibleScript> queryScriptPage(AnsibleScriptParam.PageQuery pageQuery);
+
+    BusinessWrapper<Boolean> addScript(AnsibleScriptVO.AnsibleScript ansibleScript);
+
+    BusinessWrapper<Boolean> updateScript(AnsibleScriptVO.AnsibleScript ansibleScript);
+
+    BusinessWrapper<Boolean> deleteScriptById(int id);
+
+    BusinessWrapper<Boolean> addPlaybook(AnsiblePlaybookVO.AnsiblePlaybook ansiblePlaybook);
+
+    BusinessWrapper<Boolean> updatePlaybook(AnsiblePlaybookVO.AnsiblePlaybook ansiblePlaybook);
 
     BusinessWrapper<Boolean> deletePlaybookById(int id);
 
-    BusinessWrapper<Boolean> executorCommand(ServerTaskExecutorParam.ServerTaskCommandExecutor serverTaskCommandExecutor);
+    BusinessWrapper<OcServerTask> executorCommand(ServerTaskExecutorParam.ServerTaskCommandExecutor serverTaskCommandExecutor);
 
-    BusinessWrapper<Boolean> executorPlaybook(ServerTaskExecutorParam.ServerTaskPlaybookExecutor serverTaskPlaybookExecutor);
+    BusinessWrapper<OcServerTask> executorScript(ServerTaskExecutorParam.ServerTaskScriptExecutor serverTaskScriptExecutor);
 
-    /**
-     * 查询playbook剧本路径
-     * @param ocAnsiblePlaybook
-     * @return
-     */
-    String getPlaybookPath(OcAnsiblePlaybook ocAnsiblePlaybook);
+    BusinessWrapper<OcServerTask> executorPlaybook(ServerTaskExecutorParam.ServerTaskPlaybookExecutor serverTaskPlaybookExecutor);
 
-    OcServerTaskVO.ServerTask queryServerTaskByTaskId(int taskId);
+    ServerTaskVO.ServerTask queryServerTaskByTaskId(int taskId);
 
     BusinessWrapper<Boolean> createAnsibleHosts();
 
     BusinessWrapper<Boolean> abortServerTask(int taskId);
 
     BusinessWrapper<Boolean> abortServerTaskMember(int memberId);
+
+    BusinessWrapper<AnsibleVersionVO.AnsibleVersion> queryAnsibleVersion();
+
+    BusinessWrapper<PreviewFileVO> previewAnsibleHosts();
 }

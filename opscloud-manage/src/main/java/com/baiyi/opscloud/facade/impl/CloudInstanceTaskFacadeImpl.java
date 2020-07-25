@@ -6,14 +6,10 @@ import com.baiyi.opscloud.common.base.CloudInstanceTaskPhase;
 import com.baiyi.opscloud.common.base.CloudInstanceTaskStatus;
 import com.baiyi.opscloud.common.util.BeanCopierUtils;
 import com.baiyi.opscloud.common.util.TimeUtils;
-import com.baiyi.opscloud.decorator.CloudInstanceTaskDecorator;
-import com.baiyi.opscloud.domain.generator.OcCloudInstanceTask;
-import com.baiyi.opscloud.domain.generator.OcCloudInstanceTaskMember;
-import com.baiyi.opscloud.domain.generator.OcCloudVpcVswitch;
-import com.baiyi.opscloud.domain.generator.opscloud.OcEnv;
-import com.baiyi.opscloud.domain.generator.opscloud.OcServerGroup;
-import com.baiyi.opscloud.domain.vo.cloud.OcCloudInstanceTaskVO;
-import com.baiyi.opscloud.domain.vo.cloud.OcCloudInstanceTemplateVO;
+import com.baiyi.opscloud.decorator.cloud.CloudInstanceTaskDecorator;
+import com.baiyi.opscloud.domain.generator.opscloud.*;
+import com.baiyi.opscloud.domain.vo.cloud.CloudInstanceTaskVO;
+import com.baiyi.opscloud.domain.vo.cloud.CloudInstanceTemplateVO;
 import com.baiyi.opscloud.facade.CloudInstanceTaskFacade;
 import com.baiyi.opscloud.handler.CreateInstanceTaskHandler;
 import com.baiyi.opscloud.service.cloud.OcCloudInstanceTaskMemberService;
@@ -26,11 +22,13 @@ import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
 
 import javax.annotation.Resource;
 import java.util.Date;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import static com.baiyi.opscloud.common.base.Global.ASYNC_POOL_TASK_EXECUTOR;
 
@@ -81,7 +79,7 @@ public class CloudInstanceTaskFacadeImpl implements CloudInstanceTaskFacade {
         }
         Date taskStartDate = new Date();
         int maxSerialNumber = ocServerService.queryOcServerMaxSerialNumber(createCloudInstanceBO.getCreateCloudInstance().getServerGroupId()
-                ,createCloudInstanceBO.getCreateCloudInstance().getEnvType());
+                , createCloudInstanceBO.getCreateCloudInstance().getEnvType());
 
         // 任务总时长限制 每实例5分钟上限  （10 + (n-1)*2 )
         boolean isTaskFinalized = false;
@@ -102,7 +100,7 @@ public class CloudInstanceTaskFacadeImpl implements CloudInstanceTaskFacade {
                         .envType(createCloudInstanceBO.getCreateCloudInstance().getEnvType())
                         .serverType(createCloudInstanceBO.getCloudInstanceTemplate().getCloudType())
                         .serialNumber(serialNumber)
-                        .hostname(getHostname(serialNumber,createCloudInstanceBO))
+                        .hostname(getHostname(serialNumber, createCloudInstanceBO))
                         .seq(seq)
                         .vswitchId(vswitchId)
                         .build();
@@ -111,7 +109,7 @@ public class CloudInstanceTaskFacadeImpl implements CloudInstanceTaskFacade {
             }
             // 分配公网
             createInstanceTaskHandler.allocatePublicIpAddressHandler(queryTaskMember(taskId, CloudInstanceTaskPhase.CREATE_INSTANCE.getPhase()
-                    ), createCloudInstanceBO.getCreateCloudInstance().getAllocatePublicIpAddress());
+            ), createCloudInstanceBO.getCreateCloudInstance().getAllocatePublicIpAddress());
             // 启动实例
             createInstanceTaskHandler.startInstanceHandler(queryTaskMember(taskId,
                     CloudInstanceTaskPhase.ALLOCATE_PUBLIC_IP_ADDRESS.getPhase()));
@@ -119,7 +117,7 @@ public class CloudInstanceTaskFacadeImpl implements CloudInstanceTaskFacade {
             createInstanceTaskHandler.describeInstanceStatusHandler(regionId, queryTaskMember(taskId,
                     CloudInstanceTaskPhase.STARTING.getPhase()));
             // 录入实例信息到云服务器表
-            createInstanceTaskHandler.recordInstanceCloudServerHandler(regionId,queryTaskMember(taskId,
+            createInstanceTaskHandler.recordInstanceCloudServerHandler(regionId, queryTaskMember(taskId,
                     CloudInstanceTaskPhase.RUNNING.getPhase()));
             // 录入服务器信息
             createInstanceTaskHandler.recordInstanceServerHandler(queryTaskMember(taskId,
@@ -168,6 +166,13 @@ public class CloudInstanceTaskFacadeImpl implements CloudInstanceTaskFacade {
         ocCloudInstanceTaskService.updateOcCloudInstanceTask(ocCloudInstanceTask);
     }
 
+    private boolean include(String vswitchId, List<CloudInstanceTemplateVO.VSwitch> vswitchs) {
+        for (CloudInstanceTemplateVO.VSwitch vsw : vswitchs) {
+            if (vswitchId.equals(vsw.getVswitchId())) return true;
+        }
+        return false;
+    }
+
     // 生成指定长度的轮询虚拟交换机列表，用于创建实例
     private List<String> getVswitchIdList(CreateCloudInstanceBO createCloudInstanceBO) {
         int size = createCloudInstanceBO.getCreateCloudInstance().getCreateSize();
@@ -175,25 +180,34 @@ public class CloudInstanceTaskFacadeImpl implements CloudInstanceTaskFacade {
         List<OcCloudVpcVswitch> vswitchList;
         // 自动
         if (createCloudInstanceBO.getCreateCloudInstance().getZonePattern().equalsIgnoreCase("auto")) {
-            vswitchList = queryVswitchByVpcIdAndZoneIds(createCloudInstanceBO.getCloudInstanceTemplate().getVpcId(), createCloudInstanceBO.getCloudInstanceTemplate().getInstanceZones());
+            vswitchList = getWswitchListByAuto(createCloudInstanceBO.getCloudInstanceTemplate());
         } else {
             vswitchList = queryVswitchByVpcIdAndVswitchIds(createCloudInstanceBO.getCloudInstanceTemplate().getVpcId(), createCloudInstanceBO.getCreateCloudInstance().getVswitchIds());
-            // 单可用区
         }
+
+        if(CollectionUtils.isEmpty(vswitchList)) return vswitchIds;
+
         while (vswitchIds.size() < size) {
-            if (vswitchList.isEmpty()) break;
             for (OcCloudVpcVswitch ocCloudVpcVswitch : vswitchList) {
-                if (ocCloudVpcVswitch.getAvailableIpAddressCount() >= 240) {
+                // 预留可用ip
+                if (ocCloudVpcVswitch.getAvailableIpAddressCount() <= 10) {
                     vswitchList.remove(ocCloudVpcVswitch);
                     break;
                 } else {
-                    ocCloudVpcVswitch.setAvailableIpAddressCount(ocCloudVpcVswitch.getAvailableIpAddressCount() + 1);
+                    ocCloudVpcVswitch.setAvailableIpAddressCount(ocCloudVpcVswitch.getAvailableIpAddressCount() - 1);
                     vswitchIds.add(ocCloudVpcVswitch.getVswitchId());
                 }
                 if (vswitchIds.size() >= size) break;
             }
         }
         return vswitchIds;
+    }
+
+    private List<OcCloudVpcVswitch> getWswitchListByAuto(CloudInstanceTemplateVO.CloudInstanceTemplate cloudInstanceTemplate) {
+        return queryVswitchByVpcIdAndZoneIds(cloudInstanceTemplate.getVpcId(), cloudInstanceTemplate.getInstanceZones())
+                .stream().filter(e ->
+                        include(e.getVswitchId(), cloudInstanceTemplate.getInstanceTemplate().getVswitchs())
+                ).collect(Collectors.toList());
     }
 
 
@@ -204,9 +218,9 @@ public class CloudInstanceTaskFacadeImpl implements CloudInstanceTaskFacade {
      * @param instanceZones
      * @return
      */
-    private List<OcCloudVpcVswitch> queryVswitchByVpcIdAndZoneIds(String vpcId, List<OcCloudInstanceTemplateVO.InstanceZone> instanceZones) {
+    private List<OcCloudVpcVswitch> queryVswitchByVpcIdAndZoneIds(String vpcId, List<CloudInstanceTemplateVO.InstanceZone> instanceZones) {
         List<String> zoneIds = Lists.newArrayList();
-        for (OcCloudInstanceTemplateVO.InstanceZone instanceZone : instanceZones) {
+        for (CloudInstanceTemplateVO.InstanceZone instanceZone : instanceZones) {
             if (!instanceZone.isActive()) continue;
             zoneIds.add(instanceZone.getZoneId());
         }
@@ -231,26 +245,26 @@ public class CloudInstanceTaskFacadeImpl implements CloudInstanceTaskFacade {
     }
 
     @Override
-    public OcCloudInstanceTaskVO.CloudInstanceTask queryCloudInstanceTask(int taskId) {
+    public CloudInstanceTaskVO.CloudInstanceTask queryCloudInstanceTask(int taskId) {
         OcCloudInstanceTask ocCloudInstanceTask = ocCloudInstanceTaskService.queryOcCloudInstanceTaskById(taskId);
         return getCloudInstanceTask(ocCloudInstanceTask);
     }
 
     @Override
-    public OcCloudInstanceTaskVO.CloudInstanceTask queryLastCloudInstanceTask(int templateId) {
+    public CloudInstanceTaskVO.CloudInstanceTask queryLastCloudInstanceTask(int templateId) {
         OcCloudInstanceTask ocCloudInstanceTask = ocCloudInstanceTaskService.queryLastOcCloudInstanceTaskByTemplateId(templateId);
         return getCloudInstanceTask(ocCloudInstanceTask);
     }
 
-    private OcCloudInstanceTaskVO.CloudInstanceTask getCloudInstanceTask(OcCloudInstanceTask ocCloudInstanceTask) {
+    private CloudInstanceTaskVO.CloudInstanceTask getCloudInstanceTask(OcCloudInstanceTask ocCloudInstanceTask) {
         if (ocCloudInstanceTask == null)
-            return new OcCloudInstanceTaskVO.CloudInstanceTask();
-        OcCloudInstanceTaskVO.CloudInstanceTask cloudInstanceTask = BeanCopierUtils.copyProperties(ocCloudInstanceTask, OcCloudInstanceTaskVO.CloudInstanceTask.class);
+            return new CloudInstanceTaskVO.CloudInstanceTask();
+        CloudInstanceTaskVO.CloudInstanceTask cloudInstanceTask = BeanCopierUtils.copyProperties(ocCloudInstanceTask, CloudInstanceTaskVO.CloudInstanceTask.class);
         return cloudInstanceTaskDecorator.decorator(cloudInstanceTask);
     }
 
 
-    private String getServerName(CreateCloudInstanceBO createCloudInstanceBO){
+    private String getServerName(CreateCloudInstanceBO createCloudInstanceBO) {
         String serverName;
         if (!StringUtils.isEmpty(createCloudInstanceBO.getCreateCloudInstance().getServerName())) {
             serverName = createCloudInstanceBO.getCreateCloudInstance().getServerName();
@@ -263,6 +277,7 @@ public class CloudInstanceTaskFacadeImpl implements CloudInstanceTaskFacade {
 
     /**
      * 获取实例的主机名
+     *
      * @param serialNumber
      * @param createCloudInstanceBO
      * @return

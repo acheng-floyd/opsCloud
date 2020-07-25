@@ -6,9 +6,9 @@ import com.baiyi.opscloud.common.util.BeanCopierUtils;
 import com.baiyi.opscloud.domain.BusinessWrapper;
 import com.baiyi.opscloud.domain.DataTable;
 import com.baiyi.opscloud.domain.ErrorEnum;
-import com.baiyi.opscloud.domain.generator.OcCloudImage;
+import com.baiyi.opscloud.domain.generator.opscloud.OcCloudImage;
 import com.baiyi.opscloud.domain.param.cloud.CloudImageParam;
-import com.baiyi.opscloud.domain.vo.cloud.OcCloudImageVO;
+import com.baiyi.opscloud.domain.vo.cloud.CloudImageVO;
 import com.baiyi.opscloud.facade.CloudImageFacade;
 import com.baiyi.opscloud.service.cloud.OcCloudImageService;
 import org.springframework.stereotype.Service;
@@ -28,11 +28,10 @@ public class CloudImageFacadeImpl implements CloudImageFacade {
     private OcCloudImageService ocCloudImageService;
 
     @Override
-    public DataTable<OcCloudImageVO.CloudImage> fuzzyQueryCloudImagePage(CloudImageParam.PageQuery pageQuery) {
+    public DataTable<CloudImageVO.CloudImage> fuzzyQueryCloudImagePage(CloudImageParam.PageQuery pageQuery) {
         DataTable<OcCloudImage> table = ocCloudImageService.fuzzyQueryOcCloudImageByParam(pageQuery);
-        List<OcCloudImageVO.CloudImage> page = BeanCopierUtils.copyListProperties(table.getData(), OcCloudImageVO.CloudImage.class);
-        DataTable<OcCloudImageVO.CloudImage> dataTable = new DataTable<>(page, table.getTotalNum());
-        return dataTable;
+        List<CloudImageVO.CloudImage> page = BeanCopierUtils.copyListProperties(table.getData(), CloudImageVO.CloudImage.class);
+        return new DataTable<>(page, table.getTotalNum());
     }
 
     @Override

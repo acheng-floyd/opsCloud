@@ -21,9 +21,13 @@ public interface OcUserGroupService {
 
     void addOcUserGroup(OcUserGroup ocUserGroup);
 
+    void updateOcUserGroup(OcUserGroup ocUserGroup);
+
     OcUserGroup queryOcUserGroupByName(String name);
 
     OcUserGroup queryOcUserGroupById(int id);
 
     List<OcUserGroup> queryOcUserGroupByUserId(int userId);
+
+    List<OcUserGroup> queryUserTicketOcUserGroupByParam(UserBusinessGroupParam.UserTicketOcUserGroupQuery queryParam);
 }

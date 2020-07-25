@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.baiyi.opscloud.mapper.opscloud.OcServerTaskMemberMapper">
-  <resultMap id="BaseResultMap" type="com.baiyi.opscloud.domain.generator.OcServerTaskMember">
+  <resultMap id="BaseResultMap" type="com.baiyi.opscloud.domain.generator.opscloud.OcServerTaskMember">
     <!--
       WARNING - @mbg.generated
     -->
@@ -9,6 +9,7 @@
     <result column="task_id" jdbcType="INTEGER" property="taskId" />
     <result column="host_pattern" jdbcType="VARCHAR" property="hostPattern" />
     <result column="server_id" jdbcType="INTEGER" property="serverId" />
+    <result column="env_type" jdbcType="INTEGER" property="envType" />
     <result column="manage_ip" jdbcType="VARCHAR" property="manageIp" />
     <result column="comment" jdbcType="VARCHAR" property="comment" />
     <result column="finalized" jdbcType="INTEGER" property="finalized" />
